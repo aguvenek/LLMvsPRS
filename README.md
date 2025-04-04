@@ -1,4 +1,4 @@
-# LLM vs PRS
+# LLM vs. PRS
 
 ## Description
 
