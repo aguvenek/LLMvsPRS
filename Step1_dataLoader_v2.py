@@ -20,17 +20,8 @@ Option A (GenomicsCSVDataset): Represents the approach used specifically in the 
 # Option A: GenomicsCSVDataset (Hyena example)
 class GenomicsCSVDataset(Dataset):
     def __init__(self, file_path: str, tokenizer: PreTrainedTokenizer, max_length: int, label2id: dict = None):
-        """
-        file_path: Path to CSV file containing 'sequence' and 'label' columns.
-        tokenizer: Hugging Face tokenizer.
-        max_length: max token length for sequences.
-        label2id: Optional dict mapping string labels to integer ids.
-        """
         df = pd.read_csv(file_path)
-        if label2id:
-            df['label'] = df['case_control'].map(label2id)
-        else:
-            df['label'] = df['case_control']
+        df['label'] = df['case_control'].astype(int)
         self.sequences = df['sequence'].tolist()
         self.labels = df['label'].tolist()
         self.tokenizer = tokenizer
@@ -40,6 +31,8 @@ class GenomicsCSVDataset(Dataset):
     def __getitem__(self, idx):
         seq = self.sequences[idx]
         label = self.labels[idx]
+        if pd.isna(label):
+            raise ValueError(f"Label at index {idx} is NaN! Sample: {self.samples[idx] if hasattr(self, 'samples') else 'N/A'}")
         enc = self.tokenizer(seq,
                              add_special_tokens=False,
                              max_length=self.max_length,
@@ -48,8 +41,9 @@ class GenomicsCSVDataset(Dataset):
                              return_attention_mask=True,
                              return_tensors='pt')
         item = {k: v.squeeze(0) for k, v in enc.items()}
-        item['labels'] = torch.tensor(label, dtype=torch.long)
+        item['labels'] = torch.tensor(int(label), dtype=torch.long)
         return item
+
 
 # Option B: load_huggingface_csv_dataset (Hugging Face example) - commented out for large sequence support
 # def load_huggingface_csv_dataset(file_path: str, tokenizer: PreTrainedTokenizer, max_length: int):
@@ -79,14 +73,13 @@ class GenomicsCSVDataset(Dataset):
 
 if __name__ == '__main__':
     tokenizer = AutoTokenizer.from_pretrained(
-    "/sc/arion/projects/ipm/aysegul/models/hyena-dna/hyenadna-large-1m-seqlen",
-    trust_remote_code=True,
-    local_files_only=True)
+        "/sc/arion/projects/ipm/aysegul/models/hyena-dna/hyenadna-large-1m-seqlen",
+        trust_remote_code=True,
+        local_files_only=True)
     max_len = 1_000_000
     train_file = os.getenv('TRAIN_CSV', '/sc/arion/projects/mscic1/PRS-LLM/data/clumped/ayub/ayub_clumped_samples_sequences_with_labels_withSNP.csv')
     print("Using Option A: GenomicsCSVDataset")
-    label2id = {'control':0, 'carrier':1}
-    dataset_a = GenomicsCSVDataset(train_file, tokenizer, max_len, label2id)
+    dataset_a = GenomicsCSVDataset(train_file, tokenizer, max_len)
     dataloader = DataLoader(dataset_a, batch_size=1, shuffle=True)
     for batch in dataloader:
         print(batch['input_ids'].shape, batch['labels'])
