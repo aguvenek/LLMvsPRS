@@ -98,56 +98,6 @@ if __name__ == '__main__':
     # print(dataset_b[0]['input_ids'].shape, dataset_b[0]['labels'])
 
 
-    def __getitem__(self, idx):
-        seq = self.sequences[idx]
-        label = self.labels[idx]
-        if pd.isna(label):
-            raise ValueError(f"Label at index {idx} is NaN!")
-        enc = self.tokenizer(seq,
-                             add_special_tokens=False,
-                             max_length=self.max_length,
-                             padding='max_length',
-                             truncation=True,
-                             return_attention_mask=True,
-                             return_tensors='pt')
-        item = {k: v.squeeze(0) for k, v in enc.items()}
-        item['labels'] = torch.tensor(int(label), dtype=torch.long)
-        return item
-
-
-class GenomicsCSVDataset(Dataset):
-    def __init__(self, file_path: str, tokenizer: PreTrainedTokenizer, max_length: int, label2id: dict = None):
-        """
-        file_path: Path to CSV file containing 'sequence' and 'label' columns.
-        tokenizer: Hugging Face tokenizer.
-        max_length: max token length for sequences.
-        label2id: Optional dict mapping string labels to integer ids.
-        """
-        df = pd.read_csv(file_path)
-        if label2id:
-            df['label'] = df['case_control'].map(label2id)
-        else:
-            df['label'] = df['case_control']
-        self.sequences = df['sequence'].tolist()
-        self.labels = df['label'].tolist()
-        self.tokenizer = tokenizer
-        self.max_length = max_length
-    def __len__(self):
-        return len(self.sequences)
-    def __getitem__(self, idx):
-        seq = self.sequences[idx]
-        label = self.labels[idx]
-        enc = self.tokenizer(seq,
-                             add_special_tokens=False,
-                             max_length=self.max_length,
-                             padding='max_length',
-                             truncation=True,
-                             return_attention_mask=True,
-                             return_tensors='pt')
-        item = {k: v.squeeze(0) for k, v in enc.items()}
-        item['labels'] = torch.tensor(label, dtype=torch.long)
-        return item
-
 
 
 
