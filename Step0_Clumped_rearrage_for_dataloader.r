@@ -35,6 +35,7 @@ result <- data.table(
 # ---- Save version without SNPs ----
 fwrite(result, "../ayub_clumped_samples_sequences_with_labels.csv", row.names = FALSE)
 
+
 # ---- Create and save version with SNPs ----
 snp_vector <- ctrl$SNP  # assumes SNP column is present in ctrl
 snp_concat <- paste(snp_vector, collapse = "; ")
