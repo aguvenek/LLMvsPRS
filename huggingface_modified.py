@@ -229,38 +229,67 @@ def inference_single():
         add_special_tokens=False,  # we handle special tokens elsewhere
         padding_side='left', # since HyenaDNA is causal, we pad on the left
     )
-
+    
     #### Single embedding example ####
 
-    # create a sample 450k long, prepare
+    import evaluate
+    metric = evaluate.combine([
+        evaluate.load("precision"),
+        evaluate.load("recall"),
+        evaluate.load("f1")
+    ])
+
     from Step1_dataLoader_huggingface import load_huggingface_csv_dataset
     file_path = "/sc/arion/projects/mscic1/PRS-LLM/data/clumped/ayub_clumped_samples_sequences_with_labels_withSNP.csv"
     cache_dir = "/sc/arion/projects/mscic1/PRS-LLM/hf_cache"
-    # Load the dataset
-    dataset = load_huggingface_csv_dataset(
-        file_path=file_path,
-        cache_dir=cache_dir)
+    dataset = load_huggingface_csv_dataset(file_path=file_path, cache_dir=cache_dir)
+
     #sequence = 'ACTG' * int(max_length/4)
     #sequence = dataset[0]["sequence"]
-    sequence = dataset[0]["sequence"][:900_000] #to test the code
-    tok_seq = tokenizer(sequence)
-    tok_seq = tok_seq["input_ids"]  # grab ids
+    sequence = dataset[0]["sequence"][:900_000]  # test only
+    true_label = dataset[0]["labels"]
 
-    # place on device, convert to tensor
-    tok_seq = torch.LongTensor(tok_seq).unsqueeze(0)  # unsqueeze for batch dim
-    tok_seq = tok_seq.to(device)
+    tok_seq = tokenizer(sequence)["input_ids"]
+    tok_seq = torch.LongTensor(tok_seq).unsqueeze(0).to(device)
 
     # prep model and forward
+    import torch.nn as nn
     model.to(device)
     model.eval()
+    n_classes = 2
+    embedding_dim = 256
+    classifier = nn.Linear(embedding_dim, n_classes).to(device)
+
     with torch.inference_mode():
         embeddings = model(tok_seq)
+        output = classifier(embeddings[:, -1, :])
+        pred_class = torch.argmax(output, dim=-1)
 
-    print(embeddings.shape)  # embeddings here!
+    print("\nSingle-sample prediction")
+    print(embeddings.shape)
+    print(f"Predicted class: {pred_class.item()}")
+    print(metric.compute(predictions=[pred_class.item()], references=[true_label]))
 
-# # uncomment to run! (to get embeddings)
-inference_single()
 
+    #Loop through all samples
+    preds, labels = [], []
+    for i in range(len(dataset)):
+        seq = dataset[i]["sequence"][:900_000]  # limit if needed
+        label = dataset[i]["labels"]
+        tok = tokenizer(seq)["input_ids"]
+        tok = torch.LongTensor(tok).unsqueeze(0).to(device)
 
-# to run this, just call:
-    # python huggingface.py
+        with torch.inference_mode():
+            emb = model(tok)
+            out = classifier(emb[:, -1, :])
+            pred = torch.argmax(out, dim=-1).item()
+
+        preds.append(pred)
+        labels.append(label)
+
+    print("\nFull-dataset evaluation")
+    print(metric.compute(predictions=preds, references=labels))
+
+if __name__ == "__main__":
+    inference_single()
+
